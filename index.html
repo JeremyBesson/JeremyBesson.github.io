@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
+  <link rel="stylesheet" type="text/css" href="css/dc.css"/>
+  <script src="https://d3js.org/d3.v3.min.js"></script>
+  <script src="https://d3js.org/d3-queue.v1.min.js"></script>
+  
+<style>
+    .region {
+        fill: #000;
+        stroke: #fff;
+        stroke-width: 1px;
+    }
+    .region:hover {
+        fill: #666;
+    }
+    .hidden {
+        display: none;
+    }
+    div.tooltip {
+        color: #222;
+        background-color: #fff;
+        padding: .5em;
+        text-shadow: #f5f5f5  1px 0;
+        border-radius: 2px;
+        opacity:1;
+        position: absolute;
+    }
+    body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }
+    
+    
+    
+    
+    .dc-chart g.row text {fill: black;}
+    
+    #title-map-region{
+        padding-right:450px;
+        text-align: center;
+    }
+    
+    #title-map-hopitaux{
+        padding-right:450px;
+        text-align: center;
+    }
+    
+    #chart-ring-cat {
+        padding-left:20px;
+        padding-right:20px;
+    }
+    
+    
+    
+    #chart-row-regions h4{
+        margin-left:30px;
+    }
+        
+
+  
+  </style>
+</head>
+
+<body>
+    <div class="container"></div>
+    <h4 id="title-map-region">Moyenne du score agrégé des indicateurs d'infections nosocomiales <br/>dans les hôptiaux de France en 2011 par régions</h4>
+    <h4 id="title-map-hopitaux">Score agrégé des indicateurs d'infections nosocomiales <br/>dans les hoptiaux de France en 2011 par hôpitaux</h4>
+    <div id="chart-ring-cat">
+    <h4>Proportion des différentes classes du score agrégé <br/>(En nombre d'hopitaux)</h4>
+    </div>
+    <div id="chart-row-regions">
+    <h4>Moyenne du score agrégé par région</h4>
+    </div>
+    <div id="chart-hist-all"></div>
+    <div id="chart-hist-chr-chu"></div>
+    <div id="chart-hist-ch-inf"></div>
+    <div id="chart-hist-etab-psy"></div>
+    <div id="chart-hist-hop-local"></div>
+    <div id="chart-hist-cl-sup"></div>
+    <div id="chart-hist-ssr-sld"></div>
+    <div id="chart-hist-clcc-cancer"></div>    
+    <div id="chart-hist-had"></div>
+    <div id="chart-hist-hemodialyse"></div>
+    <script type="text/javascript" src="js/d3.js"></script>
+    <script type="text/javascript" src="js/crossfilter.js"></script>
+    <script type="text/javascript" src="js/dc.js"></script>
+  <script>
+      
+    var svg;
+    
+    function createContentIndex(){
+        
+        document.getElementById("chart-ring-cat").style.display = "none";
+        document.getElementById("chart-row-regions").style.display = "none";
+        document.getElementById("title-map-region").style.display = "block";
+        document.getElementById("title-map-hopitaux").style.display = "none";
+
+        var width = 900, height = 780;
+        var displayValue = d3.format(",.0f");
+
+        svg = d3.select( "body" )
+            .append( "svg" )
+            .attr( "width", width )
+            .attr( "height", height );
+   
+        drawRectangle()
+        //Affichage de la carte
+        var projection = d3.geo.conicConformal()
+                            .translate([width/1.5, height/2])
+                            .center([2.454071, 46.279229]).scale(2500)
+                            .parallels([8, 23]);    
+                            
+        var path = d3.geo.path()
+                     .projection(projection);
+
+        var color = d3.scale.quantile()
+                            .range(['rgb(215,48,39)','rgb(215,48,39)',
+                              'rgb(252,141,89)',
+                              'rgb(254,224,139)',
+                              'rgb(217,239,139)',
+                              'rgb(45,207,96)',
+                              'rgb(26,152,80)']);
+
+
+
+        queue()  // permet de charger les fichiers de manière asynchrone
+                    .defer(d3.json, "files/regions.geojson")
+                    .defer(d3.csv, "files/Classement.csv")
+                    .await(processData);
+
+
+
+        function processData(error,francejson,classementHopitaux) {
+
+
+            var max = 0;
+            var min = 10000000;
+            var scoreTotal = [];
+            var sumTotal = [];
+            var countTotal = [];
+
+            for (var i = 0; i < classementHopitaux.length; i++) {
+                //Nom de la region
+                var dataRegion = classementHopitaux[i].regions;            
+                sumTotal[dataRegion] = 0;
+                scoreTotal[dataRegion] = 0;
+                countTotal[dataRegion] = 0;
+
+            }
+
+            for (var i = 0; i < classementHopitaux.length; i++) {
+                //Nom de la region
+                var dataRegion = classementHopitaux[i].regions;            
+
+                //Valeur associee a la region 
+                var dataValue = d3.values(classementHopitaux[i]);    
+
+                sumTotal[dataRegion] = parseFloat(sumTotal[dataRegion]) + parseFloat(dataValue[3]);
+                countTotal[dataRegion] = countTotal[dataRegion] + 1;    
+            }
+
+
+
+            for(key in countTotal){
+                // key : Nom de la region
+                scoreTotal[key] = sumTotal[key] / countTotal[key];
+            }
+
+
+            //Recherche du min et max pour toutes les valeurs de région
+            for(key in scoreTotal)
+            {	
+                if(min > parseInt(scoreTotal[key]))
+                {
+                  min = parseInt(scoreTotal[key]);    
+                }
+
+                if(max < parseInt(scoreTotal[key]))
+                {
+                  max = parseInt(scoreTotal[key]);
+                }
+
+                //Recherche de l'etat dans le GeoJSON
+                for (var j = 0; j < francejson.features.length; j++) {
+                    var jsonState = francejson.features[j].properties.nom;
+                    if (key == jsonState) {
+                        //On injecte la valeur de l'Etat dans le json
+                        francejson.features[j].properties.value = scoreTotal[key];
+
+
+                        //Pas besoin de chercher plus loin
+                        break;
+                    }
+                }	
+            }
+
+
+
+            color.domain([min, max]);
+
+            var tooltip = d3.select('body').append('div')
+                .attr('class', 'hidden tooltip');
+
+          svg.selectAll("path")
+             .data(francejson.features)
+             .enter()
+             .append("path")
+             .attr("d", path)
+             .style("opacity",1)
+             .style("fill", function(d) {
+                  var value = d.properties.value;
+
+                                    if (value) {
+                        return color(value);
+                    } else {
+                        return "#ccc";
+                    }
+
+          })
+          .on('mousemove', function(d) {
+                        var mouse = d3.mouse(svg.node()).map(function(d) {
+                            return parseInt(d);
+                        });
+                        tooltip.classed('hidden', false)
+                            .attr('style', 'left:' + (mouse[0] + 15) +
+                                    'px; top:' + (mouse[1] - 35) + 'px')
+                                    .style('opacity',1)
+                            .html(d.properties.nom + "<br/> Score agrege: " + Math.round(d.properties.value * 100)/100)
+                                                            d3.select(this).style('opacity',0.3);
+
+                    })
+            .on('mouseout', function() {
+            tooltip.classed('hidden', true);
+            d3.select(this).style('opacity',1)
+          });
+
+
+
+            // draw legend
+          var legend = svg.selectAll(".legend")
+              .data(color.quantiles())
+                    .enter().append("g")
+              .attr("class", "legend")
+              .attr("transform", function(d, i) 
+                    { return "translate(0," + i * 20 + ")"; 					});
+
+          // draw legend colored rectangles
+          legend.append("rect")
+              .attr("x", width - 18)
+              .attr("width", 18)
+              .attr("height", 18)
+              .style("fill", color);
+
+                    var valueTmp;
+                    var PerviousValueTmp = -1;
+                    var ret;
+
+          // draw legend text
+          legend.append("text")
+              .attr("x", width - 24)
+              .attr("y", 9)
+              .attr("dy", ".35em")
+              .style("text-anchor", "end")
+              .text(function(d) { valueTmp =  Math.round(d);  
+                                    ret = PerviousValueTmp + 1 + "-" + valueTmp;
+                                    PerviousValueTmp = valueTmp;
+                                    return ret;})
+    };
+    
+        mapLegend("medium", "thin", "thin", "185", "30", "240", "30", "295", "30");
+    }   
+
+    function createContentDetail(){
+        
+        document.getElementById("chart-ring-cat").style.display = "none";        
+        document.getElementById("chart-row-regions").style.display = "none";        
+        document.getElementById("title-map-region").style.display = "none";
+        document.getElementById("title-map-hopitaux").style.display = "block";
+        
+        var width = 900, height = 780, centered;
+        var displayValue = d3.format(",.0f");
+
+        svg = d3.select( "body" )
+            .append( "svg" )
+            .attr( "width", width )
+            .attr( "height", height );
+
+        //Affichage de la carte
+        var projection = d3.geo.conicConformal()
+                            .translate([width/1.5, height/2])
+                            .center([2.454071, 46.279229]).scale(2500)
+                            .parallels([8, 23]);       
+        drawRectangle()
+        var path = d3.geo.path()
+                     .projection(projection);
+       
+        var color = d3.scale.quantile()
+                    .range(['rgb(215,48,39)','rgb(215,48,39)',
+                              'rgb(252,141,89)',
+                              'rgb(254,224,139)',
+                              'rgb(217,239,139)',
+                              'rgb(45,207,96)',
+                              'rgb(26,152,80)']);
+
+        
+        queue()  // permet de charger les fichiers de manière asynchrone
+            .defer(d3.json, "files/regions.geojson")
+            .defer(d3.csv, "files/Classement.csv")
+            .await(processData);
+           
+       
+
+        function processData(error,francejson,classementHopitaux) {
+
+          
+            var max = 0;
+            var min = 10000000;
+
+            for (var i = 0; i < classementHopitaux.length; i++) {              
+                //Valeur associee a la region 
+                var dataValue = d3.values(classementHopitaux[i]);    
+                var value =	parseFloat(dataValue[3]);           
+                if(min > value){
+                    min = value;
+                }
+                if(max < value){
+                    max = value;
+                }
+            }
+                        
+
+            color.domain([min, max]);
+
+            var tooltip = d3.select('body').append('div')
+                .attr('class', 'hidden tooltip');
+       
+          svg.selectAll("path")
+             .data(francejson.features)
+             .enter()
+             .append("path")
+             .attr("d", path)
+             .on("click", clicked)
+             .style("opacity",1)
+             .style("fill", "#ccc");
+
+      
+      
+      
+            // draw legend
+            var legend = svg.selectAll(".legend")
+                .data(color.quantiles())
+                      .enter().append("g")
+                .attr("class", "legend")
+                .attr("transform", function(d, i){ 
+                    return "translate(0," + i * 20 + ")"; 
+                });
+
+            // draw legend colored rectangles
+            legend.append("rect")
+                .attr("x", width - 18)
+                .attr("width", 18)
+                .attr("height", 18)
+                .style("fill", color);
+
+                      var valueTmp;
+                      var PerviousValueTmp = -1;
+                      var ret;
+
+            // draw legend text
+            legend.append("text")
+                .attr("x", width - 24)
+                .attr("y", 9)
+                .attr("dy", ".35em")
+                .style("text-anchor", "end")
+                .text(function(d) { valueTmp =  Math.round(d);  
+                                      ret = PerviousValueTmp + 1 + "-" + valueTmp;
+                                      PerviousValueTmp = valueTmp;
+                                      return ret;})
+
+      
+            // add circles to svg
+            svg.selectAll(".pin")
+                .data(classementHopitaux)
+                .enter().append("circle", ".pin")
+                .attr("r", 1.5)
+                .attr("transform", function(d) {
+                    console.log("lat: " + d.lat + "long :" + d.long);
+                  return "translate(" + projection([
+                    d.lat,
+                    d.long
+                  ]) + ")";
+                })
+                .style("fill", function(d) {
+                    var value = d.ScoreAgrege;
+            
+                if (value) {
+                        return color(value);
+                    } else {
+                        return "#fff";
+                    }
+                  
+                  })
+                  .on('mousemove', function(d) {
+                                var mouse = d3.mouse(svg.node()).map(function(d) {
+                                    return parseInt(d);
+                                });
+                                tooltip.classed('hidden', false)
+                                    .attr('style', 'left:' + (mouse[0] + 15) +
+                                            'px; top:' + (mouse[1] - 35) + 'px')
+                                        .style('opacity',1)
+                                    .html(d.RaisonSociale + 
+                                            "<br/> Ville: " + d.CodePostal +
+                                            "<br/> Score agrege: " + d.ScoreAgrege +
+                                            "<br/> Score liso: " + d.liso +
+                                            "<br/> Score bmr: " + d.bmr +
+                                            "<br/> Score icalin2: " + d.icalin2 +
+                                            "<br/> Score icatb: " + d.icatb +
+                                            "<br/> Score icsha2: " + d.icsha2 +
+                                            "<br/> Score sarm: " + d.sarm)
+                                           
+                                            d3.selectAll("circle").style('opacity',0.1);
+                                            d3.select(this).style('opacity',1);
+                            })
+                    .on('mouseout', function() {
+                        tooltip.classed('hidden', true);
+                        d3.selectAll("circle").style('opacity',1);
+                        //d3.select(this).style('opacity',1)
+                  });
+            
+            d3.select("#image1").on("click", function() {
+                updateViz(1);
+            })
+            d3.select("#image2").on("click", function() {
+                updateViz(2);
+        }) 
+        };
+        
+        mapLegend("thin", "medium", "thin", "185", "30", "240", "30", "295", "30");
+        
+        function clicked(d) {
+          var x, y, k;
+
+          if (d && centered !== d) {
+            var centroid = path.centroid(d);
+            x = centroid[0];
+            y = centroid[1];
+            k = 4;
+            centered = d;
+          } else {
+            x = width / 2;
+            y = height / 2;
+            k = 1;
+            centered = null;
+          }
+          
+            
+          svg.selectAll("path")
+              .classed("active", centered && function(d) { return d === centered; });
+          
+          svg.transition()
+              .duration(750)
+              .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")scale(" + k + ")translate(" + -x + "," + -y + ")")
+              .style("stroke-width", 1.5 / k + "px");
+        }
+    }
+
+    function createContentChart(){    
+
+        document.getElementById("chart-ring-cat").style.display = "block";        
+        document.getElementById("chart-row-regions").style.display = "block";        
+        document.getElementById("title-map-region").style.display = "none";
+        document.getElementById("title-map-hopitaux").style.display = "none";
+        var catRingChart   = dc.pieChart("#chart-ring-cat"),
+        allHistChart  = dc.barChart("#chart-hist-all"),
+        chr_ChuHistChart = dc.barChart("#chart-hist-chr-chu"),
+        ch_InfHistChart = dc.barChart("#chart-hist-ch-inf"),
+        etab_PsyHistChart = dc.barChart("#chart-hist-etab-psy"),    
+        hop_LocalHistChart = dc.barChart("#chart-hist-hop-local"),
+        cl_SupHistChart = dc.barChart("#chart-hist-cl-sup"),
+        ssr_SldHistChart = dc.barChart("#chart-hist-ssr-sld"),    
+        clcc_CancerHistChart = dc.barChart("#chart-hist-clcc-cancer"),
+        hadHistChart = dc.barChart("#chart-hist-had"),    
+        hemodialyseHistChart = dc.barChart("#chart-hist-hemodialyse"),
+        spenderRowChart = dc.rowChart("#chart-row-regions");
+        
+
+
+        d3.csv("files/Classement.csv", function(error, hospitalData) {
+
+            // normalize/parse data
+            hospitalData.forEach(function(d) {
+                d.ScoreAgrege = d.ScoreAgrege.match(/\d+/);
+            });
+
+            // set crossfilter
+            var ndx = crossfilter(hospitalData),
+            classDim  = ndx.dimension(function(d) {return d.ClasseScoreAgrege;}),
+            scoreAgregeDim = ndx.dimension(function(d) {return Math.floor(d.ScoreAgrege/10);}),
+            regionDim  = ndx.dimension(function(d) {return d.regions;}),
+            countPerClass = classDim.group().reduceSum(function(d) {return +1;})
+
+
+            //Avg distinct score by region and by hospital type
+            var DetailDim = ndx.dimension(function(d) { return d.regions; });
+            var sidewaysGroupAll = regroup(DetailDim, ['liso', 'bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "ALL");
+            var sidewaysGroupChrChu = regroup(DetailDim, ['liso', 'bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "01-CHR-CHU");        
+            var sidewaysGroupChInf = regroup(DetailDim, ['liso', 'bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "02-CH INF 300 LP");        
+            var sidewaysGroupEtabPsy = regroup(DetailDim, ['bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "03-ETAB. PSY");        
+            var sidewaysGroupHopLocal = regroup(DetailDim, ['bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "04-HOPITAL LOCAL");
+            var sidewaysGroupClSup = regroup(DetailDim, ['liso', 'bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "05-CL SUP 100 LP");        
+            var sidewaysGroupSsrSld = regroup(DetailDim, ['bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "07-SSR-SLD");        
+            var sidewaysGroupClccCancer = regroup(DetailDim, ['liso', 'bmr', 'icalin2', 'icatb', 'icsha2', 'sarm'], "08-CLCC-CANCER");
+            var sidewaysGroupHad = regroup(DetailDim, ['bmr', 'icalin2', 'icsha2', 'sarm'], "09-HAD");
+            var sidewaysGroupHemodialyse = regroup(DetailDim, ['bmr', 'icalin2', 'icsha2', 'sarm'], "10-HEMODIALYSE");
+            
+            function regroup(dim, cols, typeEtab) {
+                var _groupAll = dim.groupAll().reduce(
+                    function(p, v) { // add
+                        cols.forEach(function(c) {
+                            if(typeEtab == "ALL" || typeEtab == v['typeEtab'])
+                            {
+                                if(parseFloat(v[c]) != 0 || c == "sarm")
+                                {
+                                    if(c == "sarm")
+                                    {
+                                         p[c].total += (1-parseFloat(v[c]))*100;
+                                    }
+                                    else
+                                    {
+                                        p[c].total += parseFloat(v[c]);
+                                    }
+                                    ++p[c].count;                    
+                                    p[c].avg = Math.round(p[c].total / p[c].count);
+                                }
+                            }
+                        });
+                        return p;
+                    },
+                    function(p, v) { // remove
+                        cols.forEach(function(c) {
+                            if(typeEtab == "ALL" || typeEtab == v['typeEtab'])
+                            {
+                                if(parseFloat(v[c]) != 0 || c == "sarm")
+                                {
+                                    if(c == "sarm")
+                                    {
+                                        p[c].total -= (1-parseFloat(v[c]))*100;
+                                    }
+                                    else
+                                    {
+                                        p[c].total -= parseFloat(v[c]);
+                                    }
+                                    --p[c].count;
+                                    p[c].avg = p[c].count ? Math.round(p[c].total / p[c].count) : 0;
+                                }
+                            }
+                        });
+                        return p;
+                    },
+                    function() { // init
+                        var p = {};
+                        cols.forEach(function(c) {
+                            p[c] = {count: 0, total: 0, avg: 0};                  
+                        });
+                        return p;
+                    });
+
+                return {
+                    all: function() {
+                        return d3.map(_groupAll.value()).entries();
+                    }
+                };
+            }
+
+
+
+            //Avg Score Agregé per region
+            var avgScoreAgreger = regionDim.group().reduce(
+                function (p, v) {
+                    ++p.count;
+                    p.total += parseFloat(v.ScoreAgrege);
+                    p.avg = Math.round(p.total / p.count);
+                    return p;
+                },
+                function (p, v) {
+                    --p.count;
+                    p.total -= parseFloat(v.ScoreAgrege);
+                    p.avg = p.count ? Math.round(p.total / p.count) : 0;
+                    return p;
+                },
+                function () {
+                    return {count: 0, total: 0, avg: 0};
+                }
+            );    
+            
+            
+            var colorRingChart = d3.scale.ordinal().domain(["NA","E","D","C","B","A"])
+                                .range(['rgb(112,107,107)',
+                                  'rgb(215,48,39)',
+                                  'rgb(252,141,89)',
+                                  'rgb(217,239,139)',
+                                  'rgb(45,207,96)',
+                                  'rgb(26,152,80)']);
+
+            //Ring chart proportion of classe by region
+            catRingChart
+                .width(350).height(350)
+                //.cx(165)
+                //.cy(140)
+                .dimension(classDim)
+                .group(countPerClass)
+                .innerRadius(50)
+                .colors(colorRingChart)
+                .colorAccessor(function(d) { 
+                    return d.key;
+                })
+                .legend(dc.legend().x(380).y(10));                
+
+            
+            //Hist chart by hospital type
+            allHistChart
+                .group(sidewaysGroupAll)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("TOUS TYPES D'HOPITAUX");  ;    
+            
+            chr_ChuHistChart
+                .group(sidewaysGroupChrChu)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("CH régionaux universitaire");    
+
+            
+            ch_InfHistChart
+                .group(sidewaysGroupChrChu)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Centres hospitaliers"); 
+                
+                
+            etab_PsyHistChart
+                .group(sidewaysGroupEtabPsy)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("CH psychiatrie");
+           
+            
+              
+            hop_LocalHistChart.group(sidewaysGroupHopLocal)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Hôpital local"); 
+                
+            
+            
+            cl_SupHistChart.group(sidewaysGroupClSup)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Cliniques"); 
+            
+            ssr_SldHistChart.group(sidewaysGroupSsrSld)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Soins de longue durée et réadaptation"); 
+                
+            clcc_CancerHistChart.group(sidewaysGroupClccCancer)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Centres de lutte contre le cancer"); 
+                
+            
+            hadHistChart.group(sidewaysGroupHad)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Hôpital à domicile");                 
+            
+            
+            hemodialyseHistChart
+                .group(sidewaysGroupHemodialyse)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+
+                })
+                .xAxisLabel("Hémodialyse"); 
+            
+            
+            var colorBarChart = d3.scale.ordinal().domain(["0-30","31-60","61-70","71-80","81-90","91-100"])
+                                .range(['rgb(215,48,39)',
+                                  'rgb(252,141,89)',
+                                  'rgb(254,224,139)',
+                                  'rgb(217,239,139)',
+                                  'rgb(45,207,96)',
+                                  'rgb(26,152,80)']);
+            
+            function getCatColor(avg)
+            {
+                if(avg > 70)
+                {
+                    if(avg <= 90)
+                    {
+                        if(avg <= 80)
+                        {
+                            return "71-80";
+                        }
+                        else
+                        {
+                            return "81-90";
+                        }
+                    }
+                    else
+                    {
+                        return "91-100";
+                    }                        
+                }
+                else
+                {
+                   if(avg <=  60)
+                   {
+                       if(avg <= 30)
+                       {
+                           return "0-30";
+                       }
+                       else
+                       {
+                           return "31-60";
+                       }
+                   }
+                   else
+                   {
+                       return "61-70";
+                   }               
+                }
+            }
+            
+            function bar_chart(chart) {
+                chart
+                    .width(269)
+                    .height(169)
+                    .y(d3.scale.linear().domain([0, 100]))
+                    .brushOn(false)
+                    .dimension(DetailDim)
+                    .x(d3.scale.ordinal())
+                    .xUnits(dc.units.ordinal)
+                    .elasticX(true)                
+                    .colors(colorBarChart)
+                    .colorAccessor(function(d) { 
+                        return  getCatColor(d.value.avg);
+                    });
+                chart.yAxis().ticks(2);
+                return chart;
+            }
+            
+            bar_chart(allHistChart)
+                .brushOn(true);
+            bar_chart(chr_ChuHistChart);
+            bar_chart(ch_InfHistChart);
+            bar_chart(etab_PsyHistChart);        
+            bar_chart(hop_LocalHistChart);
+            bar_chart(cl_SupHistChart);
+            bar_chart(ssr_SldHistChart);        
+            bar_chart(clcc_CancerHistChart);           
+            bar_chart(hadHistChart);        
+            bar_chart(hemodialyseHistChart);    
+            
+        
+            var colorRegion = d3.scale.ordinal().domain(["0-60","61-63","64-66","67-70","71-73","74-76"])
+                                .range(['rgb(215,48,39)',
+                                  'rgb(252,141,89)',
+                                  'rgb(254,224,139)',
+                                  'rgb(217,239,139)',
+                                  'rgb(45,207,96)',
+                                  'rgb(26,152,80)']);
+            
+            function getCatColorRegion(avg)
+            {
+                if(avg > 67)
+                {
+                    if(avg <= 73)
+                    {
+                        if(avg <= 70)
+                        {
+                            return "67-70";
+                        }
+                        else
+                        {
+                            return "71-73";
+                        }
+                    }
+                    else
+                    {
+                        return "74-76";
+                    }                        
+                }
+                else
+                {
+                   if(avg <=  63)
+                   {
+                       if(avg <= 60)
+                       {
+                           return "0-60";
+                       }
+                       else
+                       {
+                           return "61-63";
+                       }
+                   }
+                   else
+                   {
+                       return "64-66";
+                   }               
+                }
+            }
+            
+                                 
+            //Row chart to show avg scoreAregee by region 
+            spenderRowChart
+                .width(550).height(400)
+                .dimension(regionDim)
+                .title("Moyenne du score agrégé par région")
+                .group(avgScoreAgreger)
+                .valueAccessor(function (d) {
+                    return d.value.avg;
+                })
+                .elasticX(true)
+                .colors(colorRegion)
+                .colorAccessor(function(d) { 
+                    return getCatColorRegion(d.value.avg);
+                });
+
+
+            dc.renderAll();
+        });
+
+
+
+
+        function remove_empty_bins(source_group) {
+            return {
+                all:function () {
+                    return source_group.all().filter(function(d) {
+                        return d.value != 0;
+                    });
+                }
+            };
+        }
+        
+        mapLegend("thin", "thin", "medium", "10", "100", "65", "100", "120", "100");
+    }
+                   
+    function updateViz(image){  
+        d3.selectAll("svg").remove();
+        if(image===1){              
+            createContentIndex()
+            click()
+        }
+        if(image===2){
+            createContentDetail()
+            click()
+        }
+        if(image===3){
+            createContentChart()
+            click()
+        }
+    }
+
+    function click(){  
+        d3.select("#image1").on("click", function() {
+            updateViz(1);
+        })
+        d3.select("#image2").on("click", function() {
+            updateViz(2);
+        }) 
+        d3.select("#image3").on("click", function() {
+            updateViz(3);
+        }) 
+    }
+    
+    function mapLegend(size1, size2, size3, x1, y1, x2, y2, x3, y3){ 
+            var holder = d3.select("body")
+             .append("svg")
+             .attr("width", 449)    
+             .attr("height", 249); 
+          
+            var imgs = holder.selectAll("image").data([0]);
+                imgs.enter()
+                    .append("svg:image")
+                    .attr("id", "image1")
+                    .attr("xlink:href", "files/france_region1.png")
+                    .attr("x", x1)
+                    .attr("y", y1)
+                    .attr("style", "outline: "+size1+" solid black;")  
+                    .attr("width", "50")
+                    .attr("height", "50"); 
+            
+                imgs.enter()
+                    .append("svg:image")
+                    .attr("id", "image2")
+                    .attr("xlink:href", "files/france_point.png")
+                    .attr("x", x2)
+                    .attr("y", y2) 
+                    .attr("style", "outline: "+size2+" solid black;")  
+                    .attr("width", "50")
+                    .attr("height", "50"); 
+                
+                imgs.enter()
+                    .append("svg:image")
+                    .attr("id", "image3")
+                    .attr("xlink:href", "files/barchart.png")
+                    .attr("x", x3)
+                    .attr("y", y3) 
+                    .attr("style", "outline: "+size3+" solid black;")  
+                    .attr("width", "50")
+                    .attr("height", "50"); 
+    }
+    
+    //Draw the Rectangle
+    function drawRectangle(){
+        //line vertical
+        svg.append("line")          // attach a line
+           .style("stroke", "black")  // colour the line
+           .attr("x1", 120)     // x position of the first end of the line
+           .attr("y1", 245)      // y position of the first end of the line
+           .attr("x2", 120)     // x position of the second end of the line
+           .attr("y2", 450);
+   
+        //line horizontal bas
+        svg.append("line")          // attach a line
+           .style("stroke", "black")  // colour the line
+           .attr("x1", 0)     // x position of the first end of the line
+           .attr("y1", 450)      // y position of the first end of the line
+           .attr("x2", 120)     // x position of the second end of the line
+           .attr("y2", 450);
+           
+        //line horizontal haut
+        svg.append("line")          // attach a line
+           .style("stroke", "black")  // colour the line
+           .attr("x1", 0)     // x position of the first end of the line
+           .attr("y1", 245)      // y position of the first end of the line
+           .attr("x2", 120)     // x position of the second end of the line
+           .attr("y2", 245);
+    }
+    createContentIndex()  
+    click()
+  </script>
+</body>

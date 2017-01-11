@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>dc.js - Filtering Example</title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="css/dc.css"/>
+</head>
+<body>
+
+<div class="container">
+
+<div id="chart-ring-year"></div>
+<div id="chart-hist-spend"></div>
+<div id="chart-row-spenders"></div>
+
+<script type="text/javascript" src="js/d3.js"></script>
+<script type="text/javascript" src="js/crossfilter.js"></script>
+<script type="text/javascript" src="js/dc.js"></script>
+<script type="text/javascript"> 
+
+var yearRingChart   = dc.pieChart("#chart-ring-year"),
+    spendHistChart  = dc.barChart("#chart-hist-spend"),
+    spenderRowChart = dc.rowChart("#chart-row-spenders");
+
+d3.csv("files/Classement.csv", function(error, spendData) {
+
+	// normalize/parse data
+	spendData.forEach(function(d) {
+	    d.ScoreAgrege = d.ScoreAgrege.match(/\d+/);
+	});
+
+	// set crossfilter
+	var ndx = crossfilter(spendData),
+    classDim  = ndx.dimension(function(d) {return d.ClasseScoreAgrege;}),
+    scoreAgregeDim = ndx.dimension(function(d) {return Math.floor(d.ScoreAgrege/10);}),
+    regionDim  = ndx.dimension(function(d) {return d.regions;}),
+    countPerClass = classDim.group().reduceSum(function(d) {return +1;})
+        
+    
+    //Avg distinct score by region
+    var DetailDim = ndx.dimension(function(d) { return d.regions; });
+    var sidewaysGroup = regroup(DetailDim, ['liso_score', 'bmr_score', 'icalin2_score', 'icatb_score', 'icsha2_score']);
+
+    function regroup(dim, cols) {
+        var _groupAll = dim.groupAll().reduce(
+            function(p, v) { // add
+                cols.forEach(function(c) {
+                    p[c].total += parseFloat(v[c]);
+                    ++p[c].count;                    
+                    p[c].avg = Math.round(p[c].total / p[c].count);
+                });
+                return p;
+            },
+            function(p, v) { // remove
+                cols.forEach(function(c) {
+                    p[c].total -= parseFloat(v[c]);
+                    --p[c].count;
+                    p[c].avg = p[c].count ? Math.round(p[c].total / p[c].count) : 0;
+                });
+                return p;
+            },
+            function() { // init
+                var p = {};
+                cols.forEach(function(c) {
+                    p[c] = {count: 0, total: 0, avg: 0};
+                });
+                return p;
+            });
+
+        return {
+            all: function() {
+                return d3.map(_groupAll.value()).entries();
+            }
+        };
+    }
+    
+    
+    
+    //Avg Score Agregé per region
+    var avgScoreAgreger = regionDim.group().reduce(
+        function (p, v) {
+            ++p.count;
+            p.total += parseFloat(v.ScoreAgrege);
+            p.avg = Math.round(p.total / p.count);
+            return p;
+        },
+        function (p, v) {
+            --p.count;
+            p.total -= parseFloat(v.ScoreAgrege);
+            p.avg = p.count ? Math.round(p.total / p.count) : 0;
+            return p;
+        },
+        function () {
+            return {count: 0, total: 0, avg: 0};
+        }
+    );    
+        
+    //Ring chart proportion of classe by region
+    yearRingChart
+    .width(400).height(400)
+    .dimension(classDim)
+    .group(countPerClass)
+    .innerRadius(50);
+
+    //Hist chart by hospital type
+    spendHistChart
+        .width(500).height(400)
+        .dimension(DetailDim)
+        .group(sidewaysGroup)
+        .valueAccessor(function (d) {
+            return d.value.avg;
+            
+        })
+        .x(d3.scale.ordinal())
+        .xUnits(dc.units.ordinal)
+        .elasticX(true)
+        .elasticY(true);    
+
+    spendHistChart.yAxis().ticks(2);
+
+    spenderRowChart
+        .width(550).height(400)
+        .dimension(regionDim)
+        .group(avgScoreAgreger)
+        .valueAccessor(function (d) {
+            return d.value.avg;
+        })
+        .elasticX(true);
+    
+    
+
+    dc.renderAll();
+});
+
+
+
+
+function remove_empty_bins(source_group) {
+    return {
+        all:function () {
+            return source_group.all().filter(function(d) {
+                return d.value != 0;
+            });
+        }
+    };
+}
+
+
+</script>
+
+</div>
+</body>
+</html>
