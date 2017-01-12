@@ -271,7 +271,7 @@ and open the template in the editor.
                                     return ret;})
     };
     
-        mapLegend("medium", "thin", "thin", "185", "30", "240", "30", "295", "30");
+        mapLegend(5,1,1, "185", "30", "240", "30", "295", "30", 300);
     }   
 
     function createContentDetail(){
@@ -431,15 +431,15 @@ and open the template in the editor.
                         //d3.select(this).style('opacity',1)
                   });
             
-            d3.select("#image1").on("click", function() {
-                updateViz(1);
-            })
-            d3.select("#image2").on("click", function() {
-                updateViz(2);
-        }) 
+                /*d3.select("#image1").on("click", function() {
+                    updateViz(1);
+                })
+                d3.select("#image2").on("click", function() {
+                    updateViz(2);
+            }) */
         };
         
-        mapLegend("thin", "medium", "thin", "185", "30", "240", "30", "295", "30");
+        mapLegend(1,5,1, "185", "30", "240", "30", "295", "30", 300);
         
         function clicked(d) {
           var x, y, k;
@@ -866,26 +866,26 @@ and open the template in the editor.
             };
         }
         
-        mapLegend("thin", "thin", "medium", "10", "100", "65", "100", "120", "100");
+        mapLegend(1,1,3, "10", "100", "65", "100", "120", "100", 125);
     }
                    
     function updateViz(image){  
         d3.selectAll("svg").remove();
         if(image===1){              
             createContentIndex()
-            click()
+            //click()
         }
         if(image===2){
             createContentDetail()
-            click()
+            //click()
         }
         if(image===3){
             createContentChart()
-            click()
+            //click()
         }
     }
 
-    function click(){  
+    /*function click(){  
         d3.select("#image1").on("click", function() {
             updateViz(1);
         })
@@ -895,44 +895,71 @@ and open the template in the editor.
         d3.select("#image3").on("click", function() {
             updateViz(3);
         }) 
-    }
+    }*/
     
-    function mapLegend(size1, size2, size3, x1, y1, x2, y2, x3, y3){ 
+    function mapLegend(size1, size2, size3, x1, y1, x2, y2, x3, y3, x3image){ 
             var holder = d3.select("body")
              .append("svg")
              .attr("width", 449)    
              .attr("height", 249); 
           
             var imgs = holder.selectAll("image").data([0]);
-                imgs.enter()
-                    .append("svg:image")
+                var group = imgs.enter();
+                    group.append("rect")
+                           .attr("x", x1)
+                           .attr("y", y1)
+                           .attr("width", 50)
+                           .attr("height", 50)
+                           .attr("fill-opacity",0).attr("stroke", "black").attr("stroke-width", size1);
+                    group.append("svg:image")
                     .attr("id", "image1")
                     .attr("xlink:href", "files/france_region1.png")
                     .attr("x", x1)
                     .attr("y", y1)
-                    .attr("style", "outline: "+size1+" solid black;")  
+                    //.attr("style", "outline: "+size1+" solid black;")  
                     .attr("width", "50")
-                    .attr("height", "50"); 
+                    .attr("height", "50") 
+                    .on("click", function() {
+                        updateViz(1);
+                    }); 
             
-                imgs.enter()
-                    .append("svg:image")
+                
+                    group.append("rect")
+                           .attr("x", x2)
+                           .attr("y", y2)
+                           .attr("width", 50)
+                           .attr("height", 50)
+                           .attr("fill-opacity",0).attr("stroke", "black").attr("stroke-width", size2);
+                    group.append("svg:image")
                     .attr("id", "image2")
                     .attr("xlink:href", "files/france_point.png")
                     .attr("x", x2)
-                    .attr("y", y2) 
-                    .attr("style", "outline: "+size2+" solid black;")  
+                    .attr("y", y2)
+                    //.attr("style", "outline: "+size1+" solid black;")  
                     .attr("width", "50")
-                    .attr("height", "50"); 
+                    .attr("height", "50")
+                    .on("click", function() {
+                        updateViz(2);
+                    }); 
                 
-                imgs.enter()
-                    .append("svg:image")
+                
+                    group.append("rect")
+                           .attr("x", x3)
+                           .attr("y", y3)
+                           .attr("width", 60)
+                           .attr("height", 50)
+                           .attr("fill-opacity",0).attr("stroke", "black").attr("stroke-width", size3);
+                    group.append("svg:image")
                     .attr("id", "image3")
                     .attr("xlink:href", "files/barchart.png")
-                    .attr("x", x3)
-                    .attr("y", y3) 
-                    .attr("style", "outline: "+size3+" solid black;")  
+                    .attr("x", x3image)
+                    .attr("y", y3)
+                    //.attr("style", "outline: "+size1+" solid black;")  
                     .attr("width", "50")
-                    .attr("height", "50"); 
+                    .attr("height", "50")
+                    .on("click", function() {
+                        updateViz(3);
+                    });  
     }
     
     //Draw the Rectangle
@@ -962,6 +989,6 @@ and open the template in the editor.
            .attr("y2", 245);
     }
     createContentIndex()  
-    click()
+    //click()
   </script>
 </body>
